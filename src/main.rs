@@ -166,9 +166,9 @@ fn main() {
 
     u.key_for(&vec![0]);
     u.key_for(&vec![1]);
-    // u.key_for(&vec![2]);
+    u.key_for(&vec![2]);
 
-    for i in 1..=8 {
+    for i in 1..=4 {
 	extend(&mut u);
 	let sets = u.to_sets();
 	println!("##### {} ({} entries)", i, sets.len());
