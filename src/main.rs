@@ -161,17 +161,52 @@ fn extend(u: &mut Union) {
     }
 }
 
+const NUM_SYMS: usize = 3;
+
+fn register(u: &mut Union, word: &[usize]) {
+    let k = u.key_for(&word);
+    // Find all sub-squares, and union with square roots.
+    for len in 2..=word.len() / 2 {
+	for idx in 0..=word.len() - 2 * len {
+	    if word[idx..][..len] == word[idx + len..][..len] {
+		let mut reduced_word = word[..idx].to_vec();
+		reduced_word.extend(&word[idx + len..]);
+		let k2 = u.key_for(&reduced_word);
+		u.union(k, k2);
+	    }
+	}
+    }
+}
+
+fn extend2(u: &mut Union) {
+    let len = u.rev_map.len();
+
+    for idx in 0..len {
+	let elt = u.rev_map[idx].clone();
+	let last = *elt.last().unwrap();
+	for sym in 0..NUM_SYMS {
+	    if last != sym {
+		let mut new = elt.to_vec();
+		new.push(sym);
+		register(u, &new);
+	    }
+	}
+    }
+}
+
 fn main() {
     let mut u = Union::new();
 
-    u.key_for(&vec![0]);
-    u.key_for(&vec![1]);
-    u.key_for(&vec![2]);
+    for i in 0..NUM_SYMS {
+	u.key_for(&vec![i]);
+    }
 
-    for i in 1..=4 {
-	extend(&mut u);
+    for i in 1..=20 {
+	extend2(&mut u);
 	let sets = u.to_sets();
-	println!("##### {} ({} entries)", i, sets.len());
-	pretty_print_sets(&sets);
+	let big_sets = sets.iter().map(|v| v.len()).filter(|x| *x >= 5).count();
+	let contains_small = sets.iter().map(|v| v.iter().map(|v| v.len()).min().unwrap()).filter(|x| *x < 10).count();
+	println!("##### {} ({} entries, {} big, {} contain small)", i, sets.len(), big_sets, contains_small);
+	// pretty_print_sets(&sets);
     }
 }
