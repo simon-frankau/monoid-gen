@@ -49,7 +49,7 @@ impl Union {
         *self.rep_map.entry(v.to_vec()).or_insert_with(|| {
             let i = self.rev_map.len();
             self.rev_map.push(v.to_vec());
-	    self.ptrs.push(i);
+            self.ptrs.push(i);
             i
         })
     }
@@ -94,8 +94,8 @@ impl Union {
             mapping.entry(*tgt).or_insert_with(|| Vec::new()).push(idx)
         }
 
-	let convert = | set_num: &usize | self.rev_map[*set_num].clone();
-	
+        let convert = |set_num: &usize| self.rev_map[*set_num].clone();
+
         let mut sets = mapping
             .values()
             .map(|set_list| set_list.iter().map(convert).collect::<Vec<_>>())
@@ -112,6 +112,47 @@ impl Union {
 // Entry point
 //
 
+fn pretty_print_sets(sets: &[Vec<Vec<usize>>]) {
+    for set in sets.iter() {
+        let words = set.iter().map(|sym| syms_to_str(sym)).collect::<Vec<_>>();
+        println!("{}", words.join(", "));
+    }
+}
+
+fn extend(u: &mut Union) {
+    let len = u.rev_map.len();
+    for i_idx in 0..len {
+        let i = u.rev_map[i_idx].clone();
+
+        let i_rep_idx = u.ptrs[i_idx];
+        let i_rep = u.rev_map[i_rep_idx].clone();
+
+        for j_idx in 0..len {
+            let j = &u.rev_map[j_idx];
+            let mut ij = i.clone();
+            ij.extend(j);
+            let ij_idx = u.key_for(&ij);
+
+            let j_rep_idx = u.ptrs[j_idx];
+            let j_rep = &u.rev_map[j_rep_idx];
+            let mut ij_rep = i_rep.clone();
+            ij_rep.extend(j_rep);
+            let ij_rep_idx = u.key_for(&ij_rep);
+
+            u.union(ij_idx, ij_rep_idx);
+        }
+    }
+
+    // TODO let len = u.rev_map.len();
+    for i_idx in 0..len {
+        let i = &u.rev_map[i_idx];
+        let mut ii = i.clone();
+        ii.extend(i);
+        let ii_idx = u.key_for(&ii);
+        u.union(i_idx, ii_idx);
+    }
+}
+
 fn main() {
     let mut u = Union::new();
 
@@ -119,8 +160,10 @@ fn main() {
     u.key_for(&vec![1]);
     u.key_for(&vec![2]);
 
-    println!("{:?}", u);
-
-    let sets = u.to_sets();
-    println!("{:?}", sets);
+    for i in 1..=3 {
+	extend(&mut u);
+	let sets = u.to_sets();
+	println!("##### {i}");
+	pretty_print_sets(&sets);
+    }
 }
