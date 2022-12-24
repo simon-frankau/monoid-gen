@@ -97,7 +97,10 @@ impl Union {
     fn to_sets(&self) -> Vec<Vec<Word>> {
         let mut mapping: HashMap<Key, Vec<Key>> = HashMap::new();
         for (idx, tgt) in self.ptrs.iter().enumerate() {
-            mapping.entry(*tgt).or_insert_with(|| Vec::new()).push(idx as Key)
+            mapping
+                .entry(*tgt)
+                .or_insert_with(|| Vec::new())
+                .push(idx as Key)
         }
 
         let convert = |set_num: &Key| self.rev_map[*set_num as usize].clone();
@@ -115,7 +118,7 @@ impl Union {
 }
 
 ////////////////////////////////////////////////////////////////////////
-// Entry point
+// Main code.
 //
 
 fn pretty_print_sets(sets: &[Vec<Word>]) {
@@ -125,62 +128,20 @@ fn pretty_print_sets(sets: &[Vec<Word>]) {
     }
 }
 
-fn combine(lhs: WordRef, rhs: WordRef) -> Word {
-    let mut res = lhs.to_vec();
-    res.extend(if lhs.last() == rhs.first() { &rhs[1..] } else { rhs });
-    res
-}
-
-fn extend(u: &mut Union) {
-    let len = u.rev_map.len();
-
-    // Generate all words from pairs of words.
-    for i_idx in 0..len {
-	eprintln!("Gen {}/{}", i_idx, len);
-        let i = u.rev_map[i_idx].clone();
-
-        let i_rep_idx = u.ptrs[i_idx];
-        let i_rep = u.rev_map[i_rep_idx as usize].clone();
-
-        for j_idx in 0..len {
-            let j = &u.rev_map[j_idx];
-            let ij = combine(&i, j);
-            let ij_idx = u.key_for(&ij);
-
-            let j_rep_idx = u.ptrs[j_idx];
-            let j_rep = &u.rev_map[j_rep_idx as usize];
-	    let ij_rep = combine(&i_rep, j_rep);
-            let ij_rep_idx = u.key_for(&ij_rep);
-
-            u.union(ij_idx, ij_rep_idx);
-        }
-    }
-
-    // Ensure equivalence of squares.
-    // TODO let len = u.rev_map.len();
-    for i_idx in 0..len {
-	eprintln!("Square {}/{}", i_idx, len);
-        let i = &u.rev_map[i_idx];
-        let ii = combine(i, i);
-        let ii_idx = u.key_for(&ii);
-        u.union(i_idx as Key, ii_idx);
-    }
-}
-
 const NUM_SYMS: Sym = 3;
 
 fn register(u: &mut Union, word: WordRef) {
     let k = u.key_for(&word);
     // Find all sub-squares, and union with square roots.
     for len in 2..=word.len() / 2 {
-	for idx in 0..=word.len() - 2 * len {
-	    if word[idx..][..len] == word[idx + len..][..len] {
-		let mut reduced_word = word[..idx].to_vec();
-		reduced_word.extend(&word[idx + len..]);
-		let k2 = u.key_for(&reduced_word);
-		u.union(k, k2);
-	    }
-	}
+        for idx in 0..=word.len() - 2 * len {
+            if word[idx..][..len] == word[idx + len..][..len] {
+                let mut reduced_word = word[..idx].to_vec();
+                reduced_word.extend(&word[idx + len..]);
+                let k2 = u.key_for(&reduced_word);
+                u.union(k, k2);
+            }
+        }
     }
 }
 
@@ -188,31 +149,63 @@ fn extend2(u: &mut Union) {
     let len = u.rev_map.len();
 
     for idx in 0..len {
-	let elt = u.rev_map[idx].clone();
-	let last = *elt.last().unwrap();
-	for sym in 0..NUM_SYMS {
-	    if last != sym {
-		let mut new = elt.to_vec();
-		new.push(sym);
-		register(u, &new);
-	    }
-	}
+        let elt = u.rev_map[idx].clone();
+        let last = *elt.last().unwrap();
+        for sym in 0..NUM_SYMS {
+            if last != sym {
+                let mut new = elt.to_vec();
+                new.push(sym);
+                register(u, &new);
+            }
+        }
     }
+}
+
+// Returns a cumulative histogram, where the nth element is the number
+// of equivalence classes containing where each class contains a word
+// smaller than or equal to n.
+fn cumulative_histogram(v: &[usize]) -> Vec<usize> {
+    // Collect counts of each min-size.
+    let len = v.iter().max().unwrap() + 1;
+    let mut counts = vec![0; len];
+
+    // Hack: We don't include the empty string in our search, because
+    // concatenating empty strings onto everything, squaring empty
+    // string etc. is a waste of time. Instead, we'll hack it into the
+    // count here!
+    counts[0] = 1;
+
+    for elt in v.iter() {
+        counts[*elt] += 1;
+    }
+
+    // Convert to cumulative.
+    let mut c = 0;
+    for count in counts.iter_mut() {
+        c += *count;
+        *count = c;
+    }
+
+    counts
 }
 
 fn main() {
     let mut u = Union::new();
 
     for i in 0..NUM_SYMS {
-	u.key_for(&vec![i]);
+        u.key_for(&vec![i]);
     }
 
-    for i in 1..=20 {
-	extend2(&mut u);
-	let sets = u.to_sets();
-	let big_sets = sets.iter().map(|v| v.len()).filter(|x| *x >= 5).count();
-	let contains_small = sets.iter().map(|v| v.iter().map(|v| v.len()).min().unwrap()).filter(|x| *x < 10).count();
-	println!("##### {} ({} entries, {} big, {} contain small)", i, sets.len(), big_sets, contains_small);
-	// pretty_print_sets(&sets);
+    // On my M1 Macbook: 23 takes 10 minutes, 22 takes 140s.
+    for i in 1..=22 {
+        extend2(&mut u);
+        let sets = u.to_sets();
+        let min_elts = sets
+            .iter()
+            .map(|set| set.iter().map(|word| word.len()).min().unwrap())
+            .collect::<Vec<usize>>();
+        let histogram = cumulative_histogram(&min_elts);
+        println!("##### {} ({} entries, {:?})", i, sets.len(), &histogram);
+        // pretty_print_sets(&sets);
     }
 }
