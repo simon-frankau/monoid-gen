@@ -119,9 +119,18 @@ fn pretty_print_sets(sets: &[Vec<Vec<usize>>]) {
     }
 }
 
+fn combine(lhs: &[usize], rhs: &[usize]) -> Vec<usize> {
+    let mut res = lhs.to_vec();
+    res.extend(if lhs.last() == rhs.first() { &rhs[1..] } else { rhs });
+    res
+}
+
 fn extend(u: &mut Union) {
     let len = u.rev_map.len();
+
+    // Generate all words from pairs of words.
     for i_idx in 0..len {
+	eprintln!("Gen {}/{}", i_idx, len);
         let i = u.rev_map[i_idx].clone();
 
         let i_rep_idx = u.ptrs[i_idx];
@@ -129,25 +138,24 @@ fn extend(u: &mut Union) {
 
         for j_idx in 0..len {
             let j = &u.rev_map[j_idx];
-            let mut ij = i.clone();
-            ij.extend(j);
+            let ij = combine(&i, j);
             let ij_idx = u.key_for(&ij);
 
             let j_rep_idx = u.ptrs[j_idx];
             let j_rep = &u.rev_map[j_rep_idx];
-            let mut ij_rep = i_rep.clone();
-            ij_rep.extend(j_rep);
+	    let ij_rep = combine(&i_rep, j_rep);
             let ij_rep_idx = u.key_for(&ij_rep);
 
             u.union(ij_idx, ij_rep_idx);
         }
     }
 
+    // Ensure equivalence of squares.
     // TODO let len = u.rev_map.len();
     for i_idx in 0..len {
+	eprintln!("Square {}/{}", i_idx, len);
         let i = &u.rev_map[i_idx];
-        let mut ii = i.clone();
-        ii.extend(i);
+        let ii = combine(i, i);
         let ii_idx = u.key_for(&ii);
         u.union(i_idx, ii_idx);
     }
@@ -158,12 +166,12 @@ fn main() {
 
     u.key_for(&vec![0]);
     u.key_for(&vec![1]);
-    u.key_for(&vec![2]);
+    // u.key_for(&vec![2]);
 
-    for i in 1..=3 {
+    for i in 1..=8 {
 	extend(&mut u);
 	let sets = u.to_sets();
-	println!("##### {i}");
+	println!("##### {} ({} entries)", i, sets.len());
 	pretty_print_sets(&sets);
     }
 }
