@@ -145,7 +145,7 @@ fn register(u: &mut Union, word: WordRef) {
     }
 }
 
-fn extend2(u: &mut Union) {
+fn extend(u: &mut Union) {
     let len = u.rev_map.len();
 
     for idx in 0..len {
@@ -196,16 +196,57 @@ fn main() {
         u.key_for(&vec![i]);
     }
 
-    // On my M1 Macbook: 23 takes 10 minutes, 22 takes 140s.
-    for i in 1..=22 {
-        extend2(&mut u);
+    const GENERATE_HISTOGRAMS: bool = false;
+    const GENERATE_ELEMENTS: bool = true;
+
+    if GENERATE_HISTOGRAMS {
+        // Generate cumulative histograms of the number of equivalence
+        // classes as the search length increases.
+
+        // On my M1 Macbook: 23 takes 10 minutes, 22 takes 140s.
+        for i in 1..=22 {
+            extend(&mut u);
+            let sets = u.to_sets();
+            let min_elts = sets
+                .iter()
+                .map(|set| set.iter().map(|word| word.len()).min().unwrap())
+                .collect::<Vec<usize>>();
+            let histogram = cumulative_histogram(&min_elts);
+            println!("##### {} ({} entries, {:?})", i, sets.len(), &histogram);
+            // pretty_print_sets(&sets);
+        }
+    } else if GENERATE_ELEMENTS {
+	const MAX_LENGTH: usize = 20;
+	const MAX_REP_LEN: usize = 8;
+	
+        // Do the minimal work to find the 160 elements.
+        for _ in 1..=MAX_LENGTH {
+            extend(&mut u);
+        }
+
         let sets = u.to_sets();
-        let min_elts = sets
-            .iter()
-            .map(|set| set.iter().map(|word| word.len()).min().unwrap())
-            .collect::<Vec<usize>>();
-        let histogram = cumulative_histogram(&min_elts);
-        println!("##### {} ({} entries, {:?})", i, sets.len(), &histogram);
-        // pretty_print_sets(&sets);
+
+	// Filter out equivalence classes that don't contain a short word.
+	let sets = sets.iter().filter(|set| 
+	    set.iter().map(|word| word.len()).min().unwrap() <= MAX_REP_LEN).collect::<Vec<_>>();
+	
+        // For each equivalence class, find the shortest
+        // representations. Note we gather all equivalent shortest
+        // representations, just in case it turns out the shortest one
+        // isn't unique, which I think would be
+        // surpising/interesting... turns out it's unique.
+        fn reps(set: &[Word]) -> Vec<Word> {
+            let shortest = set.iter().map(|word| word.len()).min().unwrap();
+            set.iter()
+                .filter(|word| word.len() == shortest)
+                .map(|x| x.to_vec())
+                .collect::<Vec<_>>()
+        }
+        let shortests = sets.iter().map(|set| reps(set)).collect::<Vec<_>>();
+        for elt in shortests.iter() {
+            let stringified = elt.iter().map(|word| syms_to_str(word)).collect::<Vec<_>>();
+
+            println!("{}", stringified.join(", "));
+        }
     }
 }

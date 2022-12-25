@@ -89,9 +89,14 @@ Ideally, I'd find proof that there are no monoid members that don't
 have a representation with 8 or fewer characters, but right now I
 don't.
 
-## TODO: Next up, print up the memnbers, the multiplication table
+## Generating the elements
 
-TODO: That.
+We can then find the shortest element in each equivalence class
+(there's a unique shortest in each class), to generate a set of
+strings representing all the members of the monoid. This is what we've
+done in [elements.txt](elements.txt).
+
+TODO: Generate the "multiplication table".
 
 ## A note on research
 
