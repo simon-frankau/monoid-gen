@@ -96,7 +96,9 @@ We can then find the shortest element in each equivalence class
 strings representing all the members of the monoid. This is what we've
 done in [elements.txt](elements.txt).
 
-TODO: Generate the "multiplication table".
+We can also generate the full "multiplication table" for the monoid,
+telling you what happens when you combine any pair of these
+elements. That's what in [operation.txt](operation.txt).
 
 ## A note on research
 

@@ -75,8 +75,12 @@ impl Union {
             assert!(self.ptrs[tgt2 as usize] < tgt2);
             tgt2 = self.ptrs[tgt2 as usize];
         }
-        // Use lowest index as target.
-        let tgt = tgt1.min(tgt2);
+        // Use shortest word as target.
+        let tgt = if self.rev_map[tgt1 as usize].len() < self.rev_map[tgt2 as usize].len() {
+            tgt1
+        } else {
+            tgt2
+        };
 
         // Repoint idx1's chain to target.
         while self.ptrs[idx1 as usize] != idx1 {
@@ -92,6 +96,16 @@ impl Union {
             idx2 = tmp;
         }
         self.ptrs[idx2 as usize] = tgt;
+    }
+
+    // Chase the pointers, to get the word representing the
+    // equivalence class. As we always unify on the shortest word,
+    // this should be the shortest word in the equivalence class.
+    fn rep_of(&self, mut key: Key) -> Word {
+        while self.ptrs[key as usize] != key {
+            key = self.ptrs[key as usize];
+        }
+        self.rev_map[key as usize].clone()
     }
 
     fn to_sets(&self) -> Vec<Vec<Word>> {
@@ -197,7 +211,7 @@ fn main() {
     }
 
     const GENERATE_HISTOGRAMS: bool = false;
-    const GENERATE_ELEMENTS: bool = true;
+    const GENERATE_ELEMENTS: bool = false;
 
     if GENERATE_HISTOGRAMS {
         // Generate cumulative histograms of the number of equivalence
@@ -216,9 +230,9 @@ fn main() {
             // pretty_print_sets(&sets);
         }
     } else if GENERATE_ELEMENTS {
-	const MAX_LENGTH: usize = 20;
-	const MAX_REP_LEN: usize = 8;
-	
+        const MAX_LENGTH: usize = 20;
+        const MAX_REP_LEN: usize = 8;
+
         // Do the minimal work to find the 160 elements.
         for _ in 1..=MAX_LENGTH {
             extend(&mut u);
@@ -226,10 +240,12 @@ fn main() {
 
         let sets = u.to_sets();
 
-	// Filter out equivalence classes that don't contain a short word.
-	let sets = sets.iter().filter(|set| 
-	    set.iter().map(|word| word.len()).min().unwrap() <= MAX_REP_LEN).collect::<Vec<_>>();
-	
+        // Filter out equivalence classes that don't contain a short word.
+        let sets = sets
+            .iter()
+            .filter(|set| set.iter().map(|word| word.len()).min().unwrap() <= MAX_REP_LEN)
+            .collect::<Vec<_>>();
+
         // For each equivalence class, find the shortest
         // representations. Note we gather all equivalent shortest
         // representations, just in case it turns out the shortest one
@@ -248,5 +264,54 @@ fn main() {
 
             println!("{}", stringified.join(", "));
         }
+    } else {
+        // Let's generate the full "multiplication table":
+        const MAX_LENGTH: usize = 20;
+        const MAX_REP_LEN: usize = 8;
+
+        // Do the minimal work to find the 160 elements.
+        for _ in 1..=MAX_LENGTH {
+            extend(&mut u);
+        }
+
+        let sets = u.to_sets();
+
+        // Filter out equivalence classes that don't contain a short word.
+        let sets = sets
+            .iter()
+            .filter(|set| set.iter().map(|word| word.len()).min().unwrap() <= MAX_REP_LEN)
+            .collect::<Vec<_>>();
+
+        // For each equivalence class, find the shortest representation.
+        fn rep(set: &[Word]) -> Word {
+            set.iter()
+                .min_by(|x, y| x.len().cmp(&y.len()))
+                .unwrap()
+                .to_vec()
+        }
+        let reps = sets.iter().map(|set| rep(set)).collect::<Vec<_>>();
+
+        let u_count = u.rev_map.len();
+        for i in reps.iter() {
+            for j in reps.iter() {
+                let mut ij = i.clone();
+                if i.last() == j.first() {
+                    // Avoid repeated letters.
+                    ij.extend(&j[1..]);
+                } else {
+                    ij.extend(j);
+                }
+                let ij_key = u.key_for(&ij);
+                let ij = u.rep_of(ij_key);
+                println!(
+                    "{} * {} = {}",
+                    &syms_to_str(i),
+                    &syms_to_str(j),
+                    &syms_to_str(&ij)
+                );
+            }
+        }
+        // None of the words we've created should be new.
+        assert_eq!(u_count, u.rev_map.len());
     }
 }
