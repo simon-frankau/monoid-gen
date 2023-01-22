@@ -3,5 +3,9 @@
 version = 3
 
 [[package]]
+name = "idem_monoid"
+version = "0.1.0"
+
+[[package]]
 name = "monoid-gen"
 version = "0.1.0"

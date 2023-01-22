@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "original",
+    "idem_monoid"
+]
