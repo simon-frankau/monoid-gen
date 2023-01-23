@@ -4,13 +4,20 @@
 // form, and show the steps to perform that normalisation.
 //
 
+use clap::Parser;
+
+use std::collections::HashSet;
+
+////////////////////////////////////////////////////////////////////////
+// Types and utilities
+//
+
 type Sym = u8;
 
 type Word = Vec<Sym>;
 type WordRef<'a> = &'a [Sym];
 
 type Alphabet = Vec<Sym>;
-type AlphabetRef<'a> = &'a [Sym];
 
 fn sym_to_c(i: Sym) -> char {
     char::from_digit(i as u32 + 10, 36).unwrap()
@@ -66,7 +73,7 @@ fn generate_monoid(n_letter: usize) -> Vec<Word> {
         for perm in increasing_perms(i, n_letter as u8).iter() {
             // Create all the words using that subset:
             for word in words.iter() {
-                res.push( word.iter().map(|c| perm[*c as usize]).collect::<Word>());
+                res.push(word.iter().map(|c| perm[*c as usize]).collect::<Word>());
             }
         }
     }
@@ -82,7 +89,7 @@ fn variants_on(words: &[Word], n_letters: usize) -> Vec<(Word, Sym)> {
         for word in words.iter() {
             let new_word = word
                 .iter()
-                .map(|sym| sym + if *sym >= i { 1 } else { 0 })
+                .map(|sym| sym + u8::from(*sym >= i))
                 .collect::<Vec<_>>();
             res.push((new_word, i));
         }
@@ -96,11 +103,7 @@ fn merge(left: WordRef, right: WordRef) -> Word {
     let l_len = left.len();
     let r_len = right.len();
 
-    let start = if r_len > l_len {
-        0
-    } else {
-        l_len - r_len
-    };
+    let start = if r_len > l_len { 0 } else { l_len - r_len };
 
     for idx in start..=l_len {
         let l_part = &left[idx..];
@@ -118,18 +121,18 @@ fn merge(left: WordRef, right: WordRef) -> Word {
 // Generate list of all the possible i increasing elements of 0..n.
 fn increasing_perms(i: usize, n: Sym) -> Vec<Alphabet> {
     fn aux(acc: &mut Vec<Alphabet>, prefix: &mut Alphabet, target: usize, next: Sym, last: Sym) {
-	let remaining = target - prefix.len();
+        let remaining = target - prefix.len();
 
-	if remaining == 0 {
-	    acc.push(prefix.clone());
-	    return;
-	}
+        if remaining == 0 {
+            acc.push(prefix.clone());
+            return;
+        }
 
-	for sym in next..=last - remaining as Sym {
-	    prefix.push(sym);
-	    aux(acc, prefix, target, sym + 1, last);
-	    prefix.pop();
-	}
+        for sym in next..=last - remaining as Sym {
+            prefix.push(sym);
+            aux(acc, prefix, target, sym + 1, last);
+            prefix.pop();
+        }
     }
 
     let mut acc = Vec::new();
@@ -138,18 +141,83 @@ fn increasing_perms(i: usize, n: Sym) -> Vec<Alphabet> {
 }
 
 ////////////////////////////////////////////////////////////////////////
+// Word reduction
+//
+
+fn reduce(word: WordRef) -> Word {
+    // Base case.
+    if word.is_empty() {
+        return Vec::new();
+    }
+
+    let letters: HashSet<u8> = HashSet::from_iter(word.iter().copied());
+    let n_letters = letters.len();
+
+    // Take letters until you hit n distinct letters. Get back a word
+    // with n-1 distinct letters, and the nth letter.
+    fn take_distinct<'a>(iter: impl Iterator<Item = &'a u8>, n: usize) -> (Word, Sym) {
+        let mut word = Vec::new();
+        let mut letters = HashSet::new();
+        for c in iter {
+            letters.insert(*c);
+            if letters.len() == n {
+                return (word, *c);
+            }
+            word.push(*c);
+        }
+
+        panic!("Oh dear, not enough distinct letters (shouldn't happen!)");
+    }
+
+    let (mut l_word, l_sym) = take_distinct(word.iter(), n_letters);
+    l_word = reduce(&l_word);
+    l_word.push(l_sym);
+
+    let (mut r_word, r_sym) = take_distinct(word.iter().rev(), n_letters);
+    r_word = reduce(&r_word);
+    r_word.push(r_sym);
+    r_word.reverse();
+
+    merge(&l_word, &r_word)
+}
+
+////////////////////////////////////////////////////////////////////////
 // Main entry point.
 //
 
-fn main() {
-    let words = generate_monoid(3);
+#[derive(Debug, Parser)]
+#[clap(name = "idem_monoid")]
+#[clap(about = "Tool for generating and reducing elements of an idempotent free monoid", long_about = None)]
+struct Cli {
+    /// Size of alphabet to use when generating the idempotent monoid.
+    #[clap(long, value_parser, default_value_t = 3)]
+    generators: usize,
 
-    for word in words {
-	let word_str = if word.is_empty() {
-	    "0".to_string()
-	} else {
-	    word_to_str(&word)
-	};
-        println!("{}", word_str);
-    };
+    /// Or a word to reduce to canonical form
+    #[clap(long, value_parser)]
+    reduce: Option<String>,
+}
+
+fn main() {
+    let args = Cli::parse();
+
+    if let Some(reduce_me) = args.reduce {
+        // Reduce the given word.
+        let as_word = reduce_me.as_bytes();
+        let reduced = reduce(as_word);
+        let as_str = String::from_utf8(reduced.to_vec()).unwrap();
+        println!("{}", as_str);
+    } else {
+        // Generate all the elements of the monad.
+        let words = generate_monoid(args.generators);
+
+        for word in words {
+            let word_str = if word.is_empty() {
+                "0".to_string()
+            } else {
+                word_to_str(&word)
+            };
+            println!("{}", word_str);
+        }
+    }
 }
