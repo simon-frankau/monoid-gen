@@ -113,7 +113,7 @@ impl Union {
         for (idx, tgt) in self.ptrs.iter().enumerate() {
             mapping
                 .entry(*tgt)
-                .or_insert_with(|| Vec::new())
+                .or_insert_with(Vec::new)
                 .push(idx as Key)
         }
 
@@ -145,7 +145,7 @@ fn pretty_print_sets(sets: &[Vec<Word>]) {
 const NUM_SYMS: Sym = 3;
 
 fn register(u: &mut Union, word: WordRef) {
-    let k = u.key_for(&word);
+    let k = u.key_for(word);
     // Find all sub-squares, and union with square roots.
     for len in 2..=word.len() / 2 {
         for idx in 0..=word.len() - 2 * len {
@@ -207,7 +207,7 @@ fn main() {
     let mut u = Union::new();
 
     for i in 0..NUM_SYMS {
-        u.key_for(&vec![i]);
+        u.key_for(&[i]);
     }
 
     const GENERATE_HISTOGRAMS: bool = false;
