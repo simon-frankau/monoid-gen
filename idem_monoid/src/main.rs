@@ -5,6 +5,7 @@
 //
 
 use clap::Parser;
+use itertools::Itertools;
 
 use std::collections::HashSet;
 
@@ -70,10 +71,10 @@ fn generate_monoid(n_letter: usize) -> Vec<Word> {
     // For each i letter subset of the alphabet...
     for i in 0..=n_letter {
         let words = generate_exact_monoid(i);
-        for perm in increasing_perms(i, n_letter as u8).iter() {
+        for comb in (0..n_letter as Sym).combinations(i as usize) {
             // Create all the words using that subset:
             for word in words.iter() {
-                res.push(word.iter().map(|c| perm[*c as usize]).collect::<Word>());
+                res.push(word.iter().map(|c| comb[*c as usize]).collect::<Word>());
             }
         }
     }
@@ -116,28 +117,6 @@ fn merge(left: WordRef, right: WordRef) -> Word {
     }
 
     panic!("Should always equal at zero length overlap!");
-}
-
-// Generate list of all the possible i increasing elements of 0..n.
-fn increasing_perms(i: usize, n: Sym) -> Vec<Alphabet> {
-    fn aux(acc: &mut Vec<Alphabet>, prefix: &mut Alphabet, target: usize, next: Sym, last: Sym) {
-        let remaining = target - prefix.len();
-
-        if remaining == 0 {
-            acc.push(prefix.clone());
-            return;
-        }
-
-        for sym in next..=last - remaining as Sym {
-            prefix.push(sym);
-            aux(acc, prefix, target, sym + 1, last);
-            prefix.pop();
-        }
-    }
-
-    let mut acc = Vec::new();
-    aux(&mut acc, &mut Vec::new(), i, 0, n);
-    acc
 }
 
 ////////////////////////////////////////////////////////////////////////
