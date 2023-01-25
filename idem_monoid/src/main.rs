@@ -18,8 +18,6 @@ type Sym = u8;
 type Word = Vec<Sym>;
 type WordRef<'a> = &'a [Sym];
 
-type Alphabet = Vec<Sym>;
-
 fn sym_to_c(i: Sym) -> char {
     char::from_digit(i as u32 + 10, 36).unwrap()
 }
@@ -71,7 +69,7 @@ fn generate_monoid(n_letter: usize) -> Vec<Word> {
     // For each i letter subset of the alphabet...
     for i in 0..=n_letter {
         let words = generate_exact_monoid(i);
-        for comb in (0..n_letter as Sym).combinations(i as usize) {
+        for comb in (0..n_letter as Sym).combinations(i) {
             // Create all the words using that subset:
             for word in words.iter() {
                 res.push(word.iter().map(|c| comb[*c as usize]).collect::<Word>());
@@ -168,27 +166,31 @@ fn reduce(word: WordRef) -> Word {
 //
 // Implemented as in Lothaire. TODO: Make easier to read!
 fn find_u(x: WordRef, y: WordRef) -> Word {
-    if y.is_empty() {
-        return Vec::new();
+    // Make the word to take bits off...
+    let mut xy = x.to_vec();
+    xy.extend(y.iter());
+
+    let mut u = Vec::new();
+
+    // And take off y.len() letters...
+    for _ in y.iter() {
+        // Each iteration simply adds the letters needed to make the
+        // last letter of xy part of a square which can be removed.
+        //
+        // e.g. xabcx, we add 'abc', xabcxabc = xabc, we've removed
+        // 'x'.
+        let to_remove = xy.pop().unwrap();
+        // NB: Letter to remove *must* exist earlier in word.
+        let (repeat_point, _) = xy
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, sym)| **sym == to_remove)
+            .unwrap();
+        u.extend(xy[repeat_point + 1..].iter());
     }
 
-    // y = y2 a
-    let y2 = &y[..y.len() - 1];
-    let a = y.last().unwrap();
-
-    // Find u2 s.t. x ~ x y2 u2
-    let u2 = find_u(x, y2);
-
-    // x = z a z2
-    let (a_idx, _) = x.iter().enumerate().find(|(_, sym)| *sym == a).unwrap();
-
-    let z = &x[..a_idx];
-    let z2 = &x[a_idx + 1..];
-
-    let mut res = z2.to_vec();
-    res.extend(y2.iter());
-    res.extend(u2.iter());
-    res
+    u
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -219,7 +221,7 @@ fn main() {
         if args.verbose {
             // TODO
             let x = [0, 1, 2, 3];
-            let y = [2, 1];
+            let y = [2, 0];
             let u = find_u(&x, &y);
             println!(
                 "{} {} {}",
