@@ -182,6 +182,37 @@ fn reduce(word: WordRef) -> Word {
 }
 
 ////////////////////////////////////////////////////////////////////////
+// Code to print out reduction paths.
+//
+
+// Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu
+//
+// Implemented as in Lothaire. TODO: Make easier to read!
+fn find_u(x: WordRef, y: WordRef) -> Word {
+    if y.is_empty() {
+        return Vec::new();
+    }
+
+    // y = y2 a
+    let y2 = &y[..y.len() - 1];
+    let a = y.last().unwrap();
+
+    // Find u2 s.t. x ~ x y2 u2
+    let u2 = find_u(x, y2);
+
+    // x = z a z2
+    let (a_idx, _) = x.iter().enumerate().find(|(_, sym)| *sym == a).unwrap();
+
+    let z = &x[..a_idx];
+    let z2 = &x[a_idx + 1..];
+
+    let mut res = z2.to_vec();
+    res.extend(y2.iter());
+    res.extend(u2.iter());
+    res
+}
+
+////////////////////////////////////////////////////////////////////////
 // Main entry point.
 //
 
@@ -196,17 +227,34 @@ struct Cli {
     /// Or a word to reduce to canonical form
     #[clap(long, value_parser)]
     reduce: Option<String>,
+
+    /// If reducing a word, show the reduction path?
+    #[clap(long, value_parser)]
+    verbose: bool,
 }
 
 fn main() {
     let args = Cli::parse();
 
     if let Some(reduce_me) = args.reduce {
-        // Reduce the given word.
-        let as_word = reduce_me.as_bytes();
-        let reduced = reduce(as_word);
-        let as_str = String::from_utf8(reduced.to_vec()).unwrap();
-        println!("{}", as_str);
+        if args.verbose {
+            // TODO
+            let x = [0, 1, 2, 3];
+            let y = [2, 1];
+            let u = find_u(&x, &y);
+            println!(
+                "{} {} {}",
+                word_to_str(&x),
+                word_to_str(&y),
+                word_to_str(&u)
+            );
+        } else {
+            // Reduce the given word.
+            let as_word = reduce_me.as_bytes();
+            let reduced = reduce(as_word);
+            let as_str = String::from_utf8(reduced.to_vec()).unwrap();
+            println!("{}", as_str);
+        }
     } else {
         // Generate all the elements of the monad.
         let words = generate_monoid(args.generators);
