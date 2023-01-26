@@ -52,13 +52,21 @@ details! :)
 
 ## Tool usage
 
-**TODO: Reduce words to canonical form, and show the path to get
-there.**
+To produce the idempotent monoid generated from 3 letters, run:
 
-**TODO: Once the tool's written, explain how to use it!**
+```
+cargo run --bin idem_monoid -- --generators 3
+```
 
-## Random notes
+You can change '3' to any other number, but beware the number of
+elements grows exponentially (3 has 160 elements, 4 has 332381
+elements), so '4' is probably the biggest you'll want to try.
 
-You probably don't want to try generating the monoid on more than 4
-generators. 3 has 160 elements, 4 has 332381 elements, and it grows
-very quickly!
+To reduce a word to its canonical form, use something like this:
+
+```
+cargo run --bin idem_monoid -- --reduce ababcbcbab
+```
+
+**TODO: Still need to implement a mode that shows the reduction
+steps.**
