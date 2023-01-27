@@ -30,8 +30,7 @@ fn word_to_str(v: WordRef) -> String {
 fn chain(words: &[WordRef]) -> Word {
     words
         .iter()
-        .map(|w| w.to_vec())
-        .flatten()
+        .flat_map(|w| w.to_vec())
         .collect::<Vec<_>>()
 }
 
@@ -181,7 +180,7 @@ struct Steps {
 impl fmt::Display for Steps {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for step in self.steps.iter() {
-            write!(f, "{} -> {}", step.0, step.1)?;
+            writeln!(f, "{} -> {}", step.0, step.1)?;
         }
         Ok(())
     }
@@ -207,7 +206,21 @@ impl Steps {
         }
     }
 
-    // TODO: Steps, reverse, prefix/suffix, etc.
+    fn join(list: Vec<Steps>) -> Steps {
+        let start = list.first().unwrap().start.clone();
+        let mut end = start.clone();
+        let mut steps = Vec::new();
+
+        for mut step in list.into_iter() {
+            assert_eq!(end, step.start);
+            steps.append(&mut step.steps);
+            end = step.end;
+        }
+
+        Steps { start, end, steps }
+    }
+
+    // TODO: Reverse, prefix/suffix, etc.
 }
 
 // Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu
@@ -252,34 +265,31 @@ fn find_v(x: WordRef, y: WordRef) -> Word {
 // Convert a string from LMR to LR. Doesn't eliminate overlap between
 // L and R.
 //
-// Choose u s.t. L ~ LMRu
-// Choose v s.t. R ~ vLR
 //
 // TODO: Insert and remove overlap, if needed.
 fn faff(l: WordRef, m: WordRef, r: WordRef) -> Word {
-    let u = find_u(l, &chain(&[m, r]));
-    let v = find_v(r, l);
+    // Choose u s.t. L ~ LMRu
+    let u = &find_u(l, &chain(&[m, r]));
+    // Choose v s.t. R ~ vLR
+    let v = &find_v(r, l);
 
-    // * LM (R) -> LM (vLR)
-    let step1 = Steps::new(&[l, m], &[r], &[m, &v, l, r], &[]);
-    //   LMv(LR) -> LMv(LR LR)
-    let step2 = Steps::new(&[l, m, &v], &[l, r], &[l, r, l, r], &[]);
-    // * LM(vLR)LR -> LM(R)LR
-    let step3 = Steps::new(&[l, m], &[&v, l, r], &[r], &[l, r]);
-    // * LMR(L)R -> LMR(LMRu)R
-    let step4 = Steps::new(&[l, m, r], &[&l], &[l, m, r, &u], &[r]);
-    //   (LMRLMR)uR -> (LMR)uR
-    let step5 = Steps::new(&[], &[l, m, r, l, m, r], &[l, m, r], &[&u, r]);
-    // * (LMRu) R -> L R
-    let step6 = Steps::new(&[], &[l, m, r, &u], &[l], &[r]);
+    let steps = Steps::join(vec![
+        // * LM(R) -> LM(vLR)
+        Steps::new(&[l, m], &[r], &[v, l, r], &[]),
+        //   LMv(LR) -> LMv(LRLR)
+        Steps::new(&[l, m, v], &[l, r], &[l, r, l, r], &[]),
+        // * LM(vLR)LR -> LM(R)LR
+        Steps::new(&[l, m], &[v, l, r], &[r], &[l, r]),
+        // * LMR(L)R -> LMR(LMRu)R
+        Steps::new(&[l, m, r], &[l], &[l, m, r, u], &[r]),
+        //   (LMRLMR)uR -> (LMR)uR
+        Steps::new(&[], &[l, m, r, l, m, r], &[l, m, r], &[u, r]),
+        // * (LMRu) R -> L R
+        Steps::new(&[], &[l, m, r, u], &[l], &[r]),
+    ]);
 
-    println!("{step1}");
-    println!("{step2}");
-    println!("{step3}");
-    println!("{step4}");
-    println!("{step5}");
-    println!("{step6}");
-    step1.end
+    println!("{steps}");
+    steps.end
 }
 
 ////////////////////////////////////////////////////////////////////////
