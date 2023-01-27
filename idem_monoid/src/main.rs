@@ -243,7 +243,20 @@ impl Steps {
         }
     }
 
-    // TODO: Reverse, etc.
+    fn time_rev(&self) -> Steps {
+        Steps {
+            start: self.end.clone(),
+            end: self.start.clone(),
+            steps: self
+                .steps
+                .iter()
+                .rev()
+                .map(|(l, r)| (r.clone(), l.clone()))
+                .collect(),
+        }
+    }
+
+    // TODO: String reverse, etc.
 }
 
 // Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu, and the steps
@@ -314,7 +327,7 @@ fn faff(l: WordRef, m: WordRef, r: WordRef) -> Word {
         //   (LMRLMR)uR -> (LMR)uR
         Steps::new(&[], &[l, m, r, l, m, r], &[l, m, r], &[u, r]),
         // * (LMRu) R -> L R
-        Steps::new(&[], &[l, m, r, u], &[l], &[r]),
+        steps_u.time_rev().suffix(r),
     ]);
 
     println!("{steps}");
