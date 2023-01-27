@@ -8,6 +8,7 @@ use clap::Parser;
 use itertools::Itertools;
 
 use std::collections::HashSet;
+use std::fmt;
 
 ////////////////////////////////////////////////////////////////////////
 // Types and utilities
@@ -24,6 +25,14 @@ fn sym_to_c(i: Sym) -> char {
 
 fn word_to_str(v: WordRef) -> String {
     v.iter().map(|c| sym_to_c(*c)).collect::<String>()
+}
+
+fn chain(words: &[WordRef]) -> Word {
+    words
+        .iter()
+        .map(|w| w.to_vec())
+        .flatten()
+        .collect::<Vec<_>>()
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -48,12 +57,9 @@ fn generate_exact_monoid(n_letters: usize) -> Vec<Word> {
 
     let mut words = Vec::new();
     for (left_word, left_sym) in various_shorter_words.iter() {
-        let mut left = left_word.clone();
-        left.push(*left_sym);
+        let left = chain(&[left_word, &[*left_sym]]);
         for (right_word, right_sym) in various_shorter_words.iter() {
-            let mut right = vec![*right_sym];
-            right.extend(right_word.iter());
-
+            let right = chain(&[&[*right_sym], right_word]);
             words.push(merge(&left, &right));
         }
     }
@@ -108,9 +114,7 @@ fn merge(left: WordRef, right: WordRef) -> Word {
         let l_part = &left[idx..];
         let r_part = &right[..l_part.len()];
         if l_part == r_part {
-            let mut word = Vec::from(&left[..idx]);
-            word.extend(right.iter());
-            return word;
+            return chain(&[&left[..idx], right]);
         }
     }
 
@@ -162,13 +166,54 @@ fn reduce(word: WordRef) -> Word {
 // Code to print out reduction paths.
 //
 
+// A sequence of steps to go from a word to another representation of
+// it. It tries to encapsulate the steps to make sure we don't
+// accidentally mis-step.
+struct Steps {
+    start: Word,
+    end: Word,
+    // We use strings to allow us to make the steps clearer.  Each
+    // step represents before and after the step, so that the after of
+    // one step should be the same as the before of the next.
+    steps: Vec<(String, String)>,
+}
+
+impl fmt::Display for Steps {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for step in self.steps.iter() {
+            write!(f, "{} -> {}", step.0, step.1)?;
+        }
+        Ok(())
+    }
+}
+
+impl Steps {
+    // Represents a step from l(m1)r to l(m2)r:
+    fn new(l: &[WordRef], m1: &[WordRef], m2: &[WordRef], r: &[WordRef]) -> Steps {
+        let lw = chain(l);
+        let m1w = chain(m1);
+        let m2w = chain(m2);
+        let rw = chain(r);
+
+        let ls = word_to_str(&lw);
+        let m1s = word_to_str(&m1w);
+        let m2s = word_to_str(&m2w);
+        let rs = word_to_str(&rw);
+
+        Steps {
+            start: chain(&[&lw, &m1w, &rw]),
+            end: chain(&[&lw, &m2w, &rw]),
+            steps: vec![(format!("{ls}({m1s}){rs}"), format!("{ls}({m2s}){rs}"))],
+        }
+    }
+
+    // TODO: Steps, reverse, prefix/suffix, etc.
+}
+
 // Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu
-//
-// Implemented as in Lothaire. TODO: Make easier to read!
 fn find_u(x: WordRef, y: WordRef) -> Word {
     // Make the word to take bits off...
-    let mut xy = x.to_vec();
-    xy.extend(y.iter());
+    let mut xy = chain(&[x, y]);
 
     let mut u = Vec::new();
 
@@ -191,6 +236,50 @@ fn find_u(x: WordRef, y: WordRef) -> Word {
     }
 
     u
+}
+
+// Given x, y, alph(y) <= alph(x), find v s.t. x ~ vyx
+fn find_v(x: WordRef, y: WordRef) -> Word {
+    let mut xr = x.to_vec();
+    xr.reverse();
+    let mut yr = y.to_vec();
+    yr.reverse();
+    let mut ur = find_u(&xr, &yr);
+    ur.reverse();
+    ur
+}
+
+// Convert a string from LMR to LR. Doesn't eliminate overlap between
+// L and R.
+//
+// Choose u s.t. L ~ LMRu
+// Choose v s.t. R ~ vLR
+//
+// TODO: Insert and remove overlap, if needed.
+fn faff(l: WordRef, m: WordRef, r: WordRef) -> Word {
+    let u = find_u(l, &chain(&[m, r]));
+    let v = find_v(r, l);
+
+    // * LM (R) -> LM (vLR)
+    let step1 = Steps::new(&[l, m], &[r], &[m, &v, l, r], &[]);
+    //   LMv(LR) -> LMv(LR LR)
+    let step2 = Steps::new(&[l, m, &v], &[l, r], &[l, r, l, r], &[]);
+    // * LM(vLR)LR -> LM(R)LR
+    let step3 = Steps::new(&[l, m], &[&v, l, r], &[r], &[l, r]);
+    // * LMR(L)R -> LMR(LMRu)R
+    let step4 = Steps::new(&[l, m, r], &[&l], &[l, m, r, &u], &[r]);
+    //   (LMRLMR)uR -> (LMR)uR
+    let step5 = Steps::new(&[], &[l, m, r, l, m, r], &[l, m, r], &[&u, r]);
+    // * (LMRu) R -> L R
+    let step6 = Steps::new(&[], &[l, m, r, &u], &[l], &[r]);
+
+    println!("{step1}");
+    println!("{step2}");
+    println!("{step3}");
+    println!("{step4}");
+    println!("{step5}");
+    println!("{step6}");
+    step1.end
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -222,7 +311,8 @@ fn main() {
             // TODO
             let x = [0, 1, 2, 3];
             let y = [2, 0];
-            let u = find_u(&x, &y);
+            let z = [3, 2, 0, 1];
+            let u = faff(&x, &y, &z);
             println!(
                 "{} {} {}",
                 word_to_str(&x),
