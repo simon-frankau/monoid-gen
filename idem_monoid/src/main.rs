@@ -28,10 +28,7 @@ fn word_to_str(v: WordRef) -> String {
 }
 
 fn chain(words: &[WordRef]) -> Word {
-    words
-        .iter()
-        .flat_map(|w| w.to_vec())
-        .collect::<Vec<_>>()
+    words.iter().flat_map(|w| w.to_vec()).collect::<Vec<_>>()
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -220,35 +217,66 @@ impl Steps {
         Steps { start, end, steps }
     }
 
-    // TODO: Reverse, prefix/suffix, etc.
+    fn prefix(&self, word: WordRef) -> Steps {
+        let str = word_to_str(word);
+        Steps {
+            start: chain(&[word, &self.start]),
+            end: chain(&[word, &self.end]),
+            steps: self
+                .steps
+                .iter()
+                .map(|(l, r)| (format!("{}{}", str, l), format!("{}{}", str, r)))
+                .collect::<Vec<_>>(),
+        }
+    }
+
+    fn suffix(&self, word: WordRef) -> Steps {
+        let str = word_to_str(word);
+        Steps {
+            start: chain(&[&self.start, word]),
+            end: chain(&[&self.end, word]),
+            steps: self
+                .steps
+                .iter()
+                .map(|(l, r)| (format!("{}{}", l, str), format!("{}{}", r, str)))
+                .collect::<Vec<_>>(),
+        }
+    }
+
+    // TODO: Reverse, etc.
 }
 
-// Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu
-fn find_u(x: WordRef, y: WordRef) -> Word {
-    // Make the word to take bits off...
-    let mut xy = chain(&[x, y]);
+// Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu, and the steps
+// to go from x to xyu.
+fn find_u(x: WordRef, y: WordRef) -> (Steps, Word) {
+    // Keep squaring appropriate subwords to build up a word of the
+    // form xyu. 'l' holds the word left of the insertion point, 'r'
+    // the word to the right.
+    let mut l = x.to_vec();
+    let mut r: Word = Vec::new();
 
-    let mut u = Vec::new();
+    let mut steps = Vec::new();
 
-    // And take off y.len() letters...
-    for _ in y.iter() {
-        // Each iteration simply adds the letters needed to make the
-        // last letter of xy part of a square which can be removed.
-        //
-        // e.g. xabcx, we add 'abc', xabcxabc = xabc, we've removed
-        // 'x'.
-        let to_remove = xy.pop().unwrap();
-        // NB: Letter to remove *must* exist earlier in word.
-        let (repeat_point, _) = xy
+    for sym in y.iter() {
+        let (repeat_point, _) = l
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, sym)| **sym == to_remove)
+            .find(|(_, sym2)| **sym2 == *sym)
             .unwrap();
-        u.extend(xy[repeat_point + 1..].iter());
+
+        steps.push(Steps::new(
+            &[&l[..repeat_point]],
+            &[&l[repeat_point..]],
+            &[&l[repeat_point..], &l[repeat_point..]],
+            &[&r],
+        ));
+
+        r = chain(&[&l[repeat_point + 1..], &r]);
+        l.push(*sym);
     }
 
-    u
+    (Steps::join(steps), r)
 }
 
 // Given x, y, alph(y) <= alph(x), find v s.t. x ~ vyx
@@ -257,7 +285,8 @@ fn find_v(x: WordRef, y: WordRef) -> Word {
     xr.reverse();
     let mut yr = y.to_vec();
     yr.reverse();
-    let mut ur = find_u(&xr, &yr);
+    // TODO!
+    let (_, mut ur) = find_u(&xr, &yr);
     ur.reverse();
     ur
 }
@@ -269,7 +298,7 @@ fn find_v(x: WordRef, y: WordRef) -> Word {
 // TODO: Insert and remove overlap, if needed.
 fn faff(l: WordRef, m: WordRef, r: WordRef) -> Word {
     // Choose u s.t. L ~ LMRu
-    let u = &find_u(l, &chain(&[m, r]));
+    let (steps_u, u) = &find_u(l, &chain(&[m, r]));
     // Choose v s.t. R ~ vLR
     let v = &find_v(r, l);
 
@@ -281,7 +310,7 @@ fn faff(l: WordRef, m: WordRef, r: WordRef) -> Word {
         // * LM(vLR)LR -> LM(R)LR
         Steps::new(&[l, m], &[v, l, r], &[r], &[l, r]),
         // * LMR(L)R -> LMR(LMRu)R
-        Steps::new(&[l, m, r], &[l], &[l, m, r, u], &[r]),
+        steps_u.prefix(&chain(&[l, m, r])).suffix(r),
         //   (LMRLMR)uR -> (LMR)uR
         Steps::new(&[], &[l, m, r, l, m, r], &[l, m, r], &[u, r]),
         // * (LMRu) R -> L R
