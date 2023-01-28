@@ -186,22 +186,18 @@ impl fmt::Display for Steps {
 }
 
 impl Steps {
-    // Represents a step from l(m)r to l(mm)r:
-    fn square(l: &[WordRef], m: &[WordRef], r: &[WordRef]) -> Steps {
-        let lw = chain(l);
+    // Represents a step from w to ww:
+    fn square(m: &[WordRef]) -> Steps {
         let mw = chain(m);
-        let rw = chain(r);
         let m2w = chain(&[&mw, &mw]);
 
-        let ls = word_to_str(&lw);
         let m1s = word_to_str(&mw);
         let m2s = word_to_str(&m2w);
-        let rs = word_to_str(&rw);
 
         Steps {
-            start: chain(&[&lw, &mw, &rw]),
-            end: chain(&[&lw, &m2w, &rw]),
-            steps: vec![(format!("{ls}({m1s}){rs}"), format!("{ls}({m2s}){rs}"))],
+            start: mw,
+            end: m2w,
+            steps: vec![(format!("({m1s})"), format!("({m2s})"))],
         }
     }
 
@@ -310,11 +306,10 @@ fn find_u(x: WordRef, y: WordRef) -> (Steps, Word) {
             .find(|(_, sym2)| **sym2 == *sym)
             .unwrap();
 
-        steps.push(Steps::square(
-            &[&l[..repeat_point]],
-            &[&l[repeat_point..]],
-            &[&r],
-        ));
+        steps.push(
+            Steps::prefix(&[&l[..repeat_point]], &Steps::square(&[&l[repeat_point..]]))
+                .suffix(&[&r]),
+        );
 
         r = chain(&[&l[repeat_point + 1..], &r]);
         l.push(*sym);
@@ -350,13 +345,13 @@ fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> Word {
         // LM(R) -> LM(vLR)
         Steps::prefix(&[l, m], r_to_vlr),
         //   LMv(LR) -> LMv(LRLR)
-        Steps::square(&[l, m, v], &[l, r], &[]),
+        Steps::prefix(&[l, m, v], &Steps::square(&[l, r])),
         // LM(vLR)LR -> LM(R)LR
         Steps::prefix(&[l, m], &vlr_to_r.suffix(&[l, r])),
         // LMR(L)R -> LMR(LMRu)R
         Steps::prefix(&[l, m, r], &l_to_lmru.suffix(&[r])),
         // (LMRLMR)uR -> (LMR)uR
-        Steps::square(&[], &[l, m, r], &[u, r]).time_rev(),
+        Steps::square(&[l, m, r]).suffix(&[u, r]).time_rev(),
         // (LMRu)R -> LR
         lmru_to_l.suffix(&[r]),
     ]);
