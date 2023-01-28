@@ -159,7 +159,9 @@ fn reduce(word: WordRef) -> Word {
 }
 
 ////////////////////////////////////////////////////////////////////////
-// Code to print out reduction paths.
+// Structure to represent a sequence of squaring/unsquaring
+// steps. Intended to make it impossible (when using the interface) to
+// generate invalid sequences of operations.
 //
 
 // A sequence of steps to go from a word to another representation of
@@ -184,20 +186,20 @@ impl fmt::Display for Steps {
 }
 
 impl Steps {
-    // Represents a step from l(m1)r to l(m2)r:
-    fn new(l: &[WordRef], m1: &[WordRef], m2: &[WordRef], r: &[WordRef]) -> Steps {
+    // Represents a step from l(m)r to l(mm)r:
+    fn square(l: &[WordRef], m: &[WordRef], r: &[WordRef]) -> Steps {
         let lw = chain(l);
-        let m1w = chain(m1);
-        let m2w = chain(m2);
+        let mw = chain(m);
         let rw = chain(r);
+        let m2w = chain(&[&mw, &mw]);
 
         let ls = word_to_str(&lw);
-        let m1s = word_to_str(&m1w);
+        let m1s = word_to_str(&mw);
         let m2s = word_to_str(&m2w);
         let rs = word_to_str(&rw);
 
         Steps {
-            start: chain(&[&lw, &m1w, &rw]),
+            start: chain(&[&lw, &mw, &rw]),
             end: chain(&[&lw, &m2w, &rw]),
             steps: vec![(format!("{ls}({m1s}){rs}"), format!("{ls}({m2s}){rs}"))],
         }
@@ -282,6 +284,10 @@ impl Steps {
     }
 }
 
+////////////////////////////////////////////////////////////////////////
+// Code to print out reduction paths.
+//
+
 // Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu, and the steps
 // to go from x to xyu.
 fn find_u(x: WordRef, y: WordRef) -> (Steps, Word) {
@@ -301,10 +307,9 @@ fn find_u(x: WordRef, y: WordRef) -> (Steps, Word) {
             .find(|(_, sym2)| **sym2 == *sym)
             .unwrap();
 
-        steps.push(Steps::new(
+        steps.push(Steps::square(
             &[&l[..repeat_point]],
             &[&l[repeat_point..]],
-            &[&l[repeat_point..], &l[repeat_point..]],
             &[&r],
         ));
 
@@ -329,30 +334,29 @@ fn find_v(x: WordRef, y: WordRef) -> (Steps, Word) {
 // Convert a string from LMR to LR. Doesn't eliminate overlap between
 // L and R.
 //
-//
 // TODO: Insert and remove overlap, if needed.
 fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> Word {
     // Choose u s.t. L ~ LMRu
-    let (steps_u, u) = &find_u(l, &chain(&[m, r]));
+    let (l_to_lmru, u) = &find_u(l, &chain(&[m, r]));
     // Choose v s.t. R ~ vLR
-    let (steps_v, v) = &find_v(r, l);
+    let (r_to_vlr, v) = &find_v(r, l);
 
     let steps = Steps::join(vec![
-        // * LM(R) -> LM(vLR)
-        steps_v.prefix(&chain(&[l, m])),
+        // LM(R) -> LM(vLR)
+        r_to_vlr.prefix(&chain(&[l, m])),
         //   LMv(LR) -> LMv(LRLR)
-        Steps::new(&[l, m, v], &[l, r], &[l, r, l, r], &[]),
-        // * LM(vLR)LR -> LM(R)LR
-        steps_v
+        Steps::square(&[l, m, v], &[l, r], &[]),
+        // LM(vLR)LR -> LM(R)LR
+        r_to_vlr
             .time_rev()
             .prefix(&chain(&[l, m]))
             .suffix(&chain(&[l, r])),
-        // * LMR(L)R -> LMR(LMRu)R
-        steps_u.prefix(&chain(&[l, m, r])).suffix(r),
-        //   (LMRLMR)uR -> (LMR)uR
-        Steps::new(&[], &[l, m, r, l, m, r], &[l, m, r], &[u, r]),
-        // * (LMRu) R -> L R
-        steps_u.time_rev().suffix(r),
+        // LMR(L)R -> LMR(LMRu)R
+        l_to_lmru.prefix(&chain(&[l, m, r])).suffix(r),
+        // (LMRLMR)uR -> (LMR)uR
+        Steps::square(&[], &[l, m, r], &[u, r]).time_rev(),
+        // (LMRu) R -> L R
+        l_to_lmru.time_rev().suffix(r),
     ]);
 
     println!("{steps}");
