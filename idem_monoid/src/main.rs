@@ -243,6 +243,7 @@ impl Steps {
         }
     }
 
+    // Generate steps for the reverse operation.
     fn time_rev(&self) -> Steps {
         Steps {
             start: self.end.clone(),
@@ -256,7 +257,29 @@ impl Steps {
         }
     }
 
-    // TODO: String reverse, etc.
+    // Generate steps for the word written backwards.
+    fn word_rev(&self) -> Steps {
+        fn backwards(s: &str) -> String {
+            s.chars()
+                .rev()
+                .map(|c| match c {
+                    ')' => '(',
+                    '(' => ')',
+                    _ => c,
+                })
+                .collect::<String>()
+        }
+
+        Steps {
+            start: self.start.iter().rev().copied().collect::<Vec<_>>(),
+            end: self.end.iter().rev().copied().collect::<Vec<_>>(),
+            steps: self
+                .steps
+                .iter()
+                .map(|(l, r)| (backwards(l), backwards(r)))
+                .collect::<Vec<_>>(),
+        }
+    }
 }
 
 // Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu, and the steps
@@ -293,15 +316,14 @@ fn find_u(x: WordRef, y: WordRef) -> (Steps, Word) {
 }
 
 // Given x, y, alph(y) <= alph(x), find v s.t. x ~ vyx
-fn find_v(x: WordRef, y: WordRef) -> Word {
+fn find_v(x: WordRef, y: WordRef) -> (Steps, Word) {
     let mut xr = x.to_vec();
     xr.reverse();
     let mut yr = y.to_vec();
     yr.reverse();
-    // TODO!
-    let (_, mut ur) = find_u(&xr, &yr);
+    let (steps, mut ur) = find_u(&xr, &yr);
     ur.reverse();
-    ur
+    (steps.word_rev(), ur)
 }
 
 // Convert a string from LMR to LR. Doesn't eliminate overlap between
@@ -309,19 +331,22 @@ fn find_v(x: WordRef, y: WordRef) -> Word {
 //
 //
 // TODO: Insert and remove overlap, if needed.
-fn faff(l: WordRef, m: WordRef, r: WordRef) -> Word {
+fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> Word {
     // Choose u s.t. L ~ LMRu
     let (steps_u, u) = &find_u(l, &chain(&[m, r]));
     // Choose v s.t. R ~ vLR
-    let v = &find_v(r, l);
+    let (steps_v, v) = &find_v(r, l);
 
     let steps = Steps::join(vec![
         // * LM(R) -> LM(vLR)
-        Steps::new(&[l, m], &[r], &[v, l, r], &[]),
+        steps_v.prefix(&chain(&[l, m])),
         //   LMv(LR) -> LMv(LRLR)
         Steps::new(&[l, m, v], &[l, r], &[l, r, l, r], &[]),
         // * LM(vLR)LR -> LM(R)LR
-        Steps::new(&[l, m], &[v, l, r], &[r], &[l, r]),
+        steps_v
+            .time_rev()
+            .prefix(&chain(&[l, m]))
+            .suffix(&chain(&[l, r])),
         // * LMR(L)R -> LMR(LMRu)R
         steps_u.prefix(&chain(&[l, m, r])).suffix(r),
         //   (LMRLMR)uR -> (LMR)uR
@@ -364,7 +389,7 @@ fn main() {
             let x = [0, 1, 2, 3];
             let y = [2, 0];
             let z = [3, 2, 0, 1];
-            let u = faff(&x, &y, &z);
+            let u = remove_middle(&x, &y, &z);
             println!(
                 "{} {} {}",
                 word_to_str(&x),
