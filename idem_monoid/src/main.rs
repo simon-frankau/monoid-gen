@@ -219,12 +219,14 @@ impl Steps {
         Steps { start, end, steps }
     }
 
-    fn prefix(&self, word: WordRef) -> Steps {
-        let str = word_to_str(word);
+    // Written this way so we can use it in prefix form
+    fn prefix(words: &[WordRef], s: &Steps) -> Steps {
+        let word = chain(words);
+        let str = word_to_str(&word);
         Steps {
-            start: chain(&[word, &self.start]),
-            end: chain(&[word, &self.end]),
-            steps: self
+            start: chain(&[&word, &s.start]),
+            end: chain(&[&word, &s.end]),
+            steps: s
                 .steps
                 .iter()
                 .map(|(l, r)| (format!("{}{}", str, l), format!("{}{}", str, r)))
@@ -232,11 +234,12 @@ impl Steps {
         }
     }
 
-    fn suffix(&self, word: WordRef) -> Steps {
-        let str = word_to_str(word);
+    fn suffix(&self, words: &[WordRef]) -> Steps {
+        let word = chain(words);
+        let str = word_to_str(&word);
         Steps {
-            start: chain(&[&self.start, word]),
-            end: chain(&[&self.end, word]),
+            start: chain(&[&self.start, &word]),
+            end: chain(&[&self.end, &word]),
             steps: self
                 .steps
                 .iter()
@@ -338,25 +341,24 @@ fn find_v(x: WordRef, y: WordRef) -> (Steps, Word) {
 fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> Word {
     // Choose u s.t. L ~ LMRu
     let (l_to_lmru, u) = &find_u(l, &chain(&[m, r]));
+    let lmru_to_l = l_to_lmru.time_rev();
     // Choose v s.t. R ~ vLR
     let (r_to_vlr, v) = &find_v(r, l);
+    let vlr_to_r = r_to_vlr.time_rev();
 
     let steps = Steps::join(vec![
         // LM(R) -> LM(vLR)
-        r_to_vlr.prefix(&chain(&[l, m])),
+        Steps::prefix(&[l, m], r_to_vlr),
         //   LMv(LR) -> LMv(LRLR)
         Steps::square(&[l, m, v], &[l, r], &[]),
         // LM(vLR)LR -> LM(R)LR
-        r_to_vlr
-            .time_rev()
-            .prefix(&chain(&[l, m]))
-            .suffix(&chain(&[l, r])),
+        Steps::prefix(&[l, m], &vlr_to_r.suffix(&[l, r])),
         // LMR(L)R -> LMR(LMRu)R
-        l_to_lmru.prefix(&chain(&[l, m, r])).suffix(r),
+        Steps::prefix(&[l, m, r], &l_to_lmru.suffix(&[r])),
         // (LMRLMR)uR -> (LMR)uR
         Steps::square(&[], &[l, m, r], &[u, r]).time_rev(),
-        // (LMRu) R -> L R
-        l_to_lmru.time_rev().suffix(r),
+        // (LMRu)R -> LR
+        lmru_to_l.suffix(&[r]),
     ]);
 
     println!("{steps}");
