@@ -55,7 +55,18 @@ details! :)
 To produce the idempotent monoid generated from 3 letters, run:
 
 ```
-cargo run --bin idem_monoid -- --generators 3
+$ cargo run --bin idem_monoid -- --generators 3
+...
+0
+a
+b
+c
+bab
+ba
+ab
+aba
+cac
+...
 ```
 
 You can change '3' to any other number, but beware the number of
@@ -65,8 +76,27 @@ elements), so '4' is probably the biggest you'll want to try.
 To reduce a word to its canonical form, use something like this:
 
 ```
-cargo run --bin idem_monoid -- --reduce ababcbcbab
+$ cargo run --bin idem_monoid -- --reduce ababcbcbab
+...
+abcbab
 ```
 
-**TODO: Still need to implement a mode that shows the reduction
-steps.**
+To see the reduction steps you can perform to achieve this
+minimisation, add `--verbose`:
+
+```
+$ cargo run --bin idem_monoid -- --reduce ababcbcbab --verbose
+...
+(abab)cbcbab -> (ab)cbcbab
+abcb(c)bab -> abcb(cc)bab
+abcb(ccb)ab -> abcb(ccbccb)ab
+abcbcc(bccba)b -> abcbcc(bccbabccba)b
+abcbccbccb(abccbab) -> abcbccbccb(abccbababccbab)
+abcbcc(bccbabccba)babccbab -> abcbcc(bccba)babccbab
+abcb(ccbccb)ababccbab -> abcb(ccb)ababccbab
+...
+```
+
+As you can see, the algorithm does not take the quick and simply
+route, and isn't entirely obvious in what it's doing, but it follows
+Lothaire's approach and gets there in the end.
