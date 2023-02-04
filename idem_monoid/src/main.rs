@@ -152,98 +152,89 @@ fn find_right_subword(word: WordRef, n: usize) -> usize {
 
 // Reduce the left sub-word that uses all but one of the characters in
 // the word.
-fn reduce_left(word: WordRef, n_letters: usize) -> (Steps, Word) {
+fn reduce_left(word: WordRef, n_letters: usize) -> Steps {
     let len = find_left_subword(word, n_letters - 1);
     let to_reduce = &word[..len];
     let rest = &word[len..];
-    let (steps, mut reduced) = reduce(to_reduce);
-    let steps = steps.suffix(&[rest]);
-    reduced.extend(rest);
-    (steps, reduced)
+    reduce(to_reduce).suffix(&[rest])
 }
 
 // Same, but for the right.
-fn reduce_right(word: WordRef, n_letters: usize) -> (Steps, Word) {
+fn reduce_right(word: WordRef, n_letters: usize) -> Steps {
     let len = find_right_subword(word, n_letters - 1);
     let to_reduce = &word[len..];
-    let mut rest = word[..len].to_vec();
-    let (steps, reduced) = reduce(to_reduce);
-    let steps = Steps::prefix(&[&rest], &steps);
-    rest.extend(reduced);
-    (steps, rest)
+    let rest = word[..len].to_vec();
+    Steps::prefix(&[&rest], &reduce(to_reduce))
 }
 
-// Like `merge`, but returns steps.
-fn reduce_middle(left: WordRef, right: WordRef) -> (Steps, Word) {
+// Like `merge`, but returns steps. Finds the unsquaring the maximally
+// shortens the word.
+fn reduce_middle(left: WordRef, right: WordRef) -> Steps {
     let l_len = left.len();
     let r_len = right.len();
 
+    // Starting index of the biggest possible overlap.
     let start = if r_len > l_len { 0 } else { l_len - r_len };
 
-    for idx in start..=l_len {
+    for idx in start..l_len {
+        // Get the left and right potential parts of the overlap, see
+        // if they do.
         let l_part = &left[idx..];
         let r_part = &right[..l_part.len()];
         if l_part == r_part {
+            // They do. Build the unsquaring operation to eliminate
+            // it.
             let l = &left[..idx];
             let m = l_part;
             let r = &right[l_part.len()..];
-
-            if l_part.is_empty() {
-                let after = chain(&[left, right]);
-                return (Steps::empty(&after), after);
-            } else {
-                let step = Steps::prefix(&[l], &Steps::square(&[m]).suffix(&[r])).time_rev();
-                let after = step.end.clone();
-                return (step, after);
-            }
+            return Steps::prefix(&[l], &Steps::square(&[m]).suffix(&[r])).time_rev();
         }
     }
 
-    panic!("Should always equal at zero length overlap!");
+    Steps::empty(&chain(&[left, right]))
 }
 
-fn reduce(word: WordRef) -> (Steps, Word) {
+// Given a word, produces the steps that maximally shortens it to
+// normal form.
+fn reduce(word: WordRef) -> Steps {
     // Base case - do nothing for empty string.
     if word.is_empty() {
-        return (Steps::empty(word), Vec::new());
+        return Steps::empty(word);
     }
 
     // Get alphabet size.
     let letters: HashSet<u8> = HashSet::from_iter(word.iter().copied());
     let n_letters = letters.len();
 
+    // Place to accumulate the steps performed:
+    let mut steps = Vec::new();
+
     // Reduce the subwords (using n - 1 letters) on the left and right.
-    let (l_steps, word) = reduce_left(word, n_letters);
-    let (r_steps, word) = reduce_right(&word, n_letters);
+    steps.push(reduce_left(word, n_letters));
+    let word = &steps.last().unwrap().end;
+    steps.push(reduce_right(word, n_letters));
+    let word = &steps.last().unwrap().end;
 
     // Extract the left and right shortest words using all the letters
     // (one longer than the longest words using all but one letter!).
-    let l_len = find_left_subword(&word, n_letters - 1) + 1;
+    let l_len = find_left_subword(word, n_letters - 1) + 1;
     let l_word = word[..l_len].to_vec();
 
-    let r_idx = find_right_subword(&word, n_letters - 1) - 1;
+    let r_idx = find_right_subword(word, n_letters - 1) - 1;
     let r_word = word[r_idx..].to_vec();
 
-    // TODO: Don't needlessly unoverlap and re-overlap.
-    let unoverlap = if l_len > r_idx {
-        let l = &word[..r_idx];
-        let m = &word[r_idx..l_len];
-        let r = &word[l_len..];
-        Steps::prefix(&[l], &Steps::square(&[m]).suffix(&[r]))
-    } else {
-        Steps::empty(&word)
-    };
+    // If the left and right subwords overlap no further reduction is
+    // possible, they're already in minimal form.
+    if l_len <= r_idx {
+        // Only try to remove a middle section if there is one.
+        if l_len < r_idx {
+            steps.push(remove_middle(&l_word, &word[l_len..r_idx], &r_word));
+        }
 
-    let (mid_steps, _word) = if r_idx > l_len {
-        remove_middle(&l_word, &word[l_len..r_idx], &r_word)
-    } else {
-        let word = chain(&[&l_word, &r_word]);
-        (Steps::empty(&word), word)
-    };
-    let (end_step, word) = reduce_middle(&l_word, &r_word);
-    let steps = Steps::join(vec![l_steps, r_steps, unoverlap, mid_steps, end_step]);
-
-    (steps, word)
+        // Then remove overlap between left and right subwords.
+        steps.push(reduce_middle(&l_word, &r_word));
+    }
+    Steps::join(steps)
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -381,7 +372,7 @@ impl Steps {
 }
 
 ////////////////////////////////////////////////////////////////////////
-// Code to print out reduction paths.
+// Core reduction algorithm, from Lothaire.
 //
 
 // Given x, y, alph(y) <= alph(x), find u s.t. x ~ xyu, and the steps
@@ -428,7 +419,7 @@ fn find_v(x: WordRef, y: WordRef) -> (Steps, Word) {
 
 // Convert a string from LMR to LR. Doesn't eliminate overlap between
 // L and R.
-fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> (Steps, Word) {
+fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> Steps {
     // Choose u s.t. L ~ LMRu
     let (l_to_lmru, u) = &find_u(l, &chain(&[m, r]));
     let lmru_to_l = l_to_lmru.time_rev();
@@ -436,7 +427,7 @@ fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> (Steps, Word) {
     let (r_to_vlr, v) = &find_v(r, l);
     let vlr_to_r = r_to_vlr.time_rev();
 
-    let steps = Steps::join(vec![
+    Steps::join(vec![
         // LM(R) -> LM(vLR)
         Steps::prefix(&[l, m], r_to_vlr),
         //   LMv(LR) -> LMv(LRLR)
@@ -449,10 +440,7 @@ fn remove_middle(l: WordRef, m: WordRef, r: WordRef) -> (Steps, Word) {
         Steps::square(&[l, m, r]).suffix(&[u, r]).time_rev(),
         // (LMRu)R -> LR
         lmru_to_l.suffix(&[r]),
-    ]);
-
-    let end = steps.end.clone();
-    (steps, end)
+    ])
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -482,11 +470,11 @@ fn main() {
     if let Some(reduce_me) = args.reduce {
         // Reduce the given word.
         let as_word = str_to_word(&reduce_me);
-        let (steps, reduced) = reduce(&as_word);
+        let steps = reduce(&as_word);
         if args.verbose {
             println!("{}", steps);
         }
-        let as_str = word_to_str(&reduced);
+        let as_str = word_to_str(&steps.end);
         println!("{}", as_str);
     } else {
         // Generate all the elements of the monad.
